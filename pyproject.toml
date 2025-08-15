@@ -1,0 +1,22 @@
+[project]
+name = "ave-mcp-server"
+version = "0.1.0"
+description = "MCP server for agent integrations with shipping quotes"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+   "mcp[cli]>=1.11.0",
+   "fastmcp>=0.4.0",
+   "requests>=2.32.4",
+   "python-dotenv>=1.0.0",
+   "pyjwt>=2.8.0",
+   "cryptography>=41.0.0",
+   "authlib>=1.2.0",
+   "httpx>=0.25.0",
+   "typing-extensions>=4.14.1",
+   "fastapi>=0.116.1",
+   "uvicorn>=0.35.0",
+   "python-jose[cryptography]>=3.5.0",
+   "pycryptodome>=3.23.0",
+   "redis>=6.3.0",
+]

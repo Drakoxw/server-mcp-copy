@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    container_name: aveonline-mcp-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8008:8008"
+      - "8877:8877"
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ave-network
+    # Opcional: límites de recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  redis:
+    image: redis:7.2-alpine  # Versión más liviana
+    container_name: aveonline-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf  # Configuración custom
+    networks:
+      - ave-network
+    # Comando mejorado con configuración
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Límites de recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  ave-network:
+    driver: bridge

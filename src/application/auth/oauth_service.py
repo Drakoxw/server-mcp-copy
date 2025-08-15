@@ -116,9 +116,11 @@ class OAuthService:
             code_challenge = self._create_s256_code_challenge(code_verifier)
             
             # Datos de la sesión
+            # 'redirect_uri': f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback",
+            # 
             session_data = {
                 'code_verifier': code_verifier,
-                'redirect_uri': f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback",
+                'redirect_uri': f"{self.config.redirect_uri}/callback",
                 'created_for': 'oauth_flow'
             }
             
@@ -129,7 +131,8 @@ class OAuthService:
             )
             
             # Configurar redirect URI con session_id
-            redirect_uri = f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback/{session_id}"
+            # redirect_uri = f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback/{session_id}"
+            redirect_uri = f"{self.config.redirect_uri}/callback/{session_id}"
             
             # Actualizar redirect_uri en la sesión
             await session_service.update_session(session_id, {'redirect_uri': redirect_uri})

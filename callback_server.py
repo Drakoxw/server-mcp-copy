@@ -161,6 +161,96 @@ class OptimizedCallbackServer:
                 logger.error(f"Error procesando callback para sesión {session_id}: {str(e)}")
                 return self._error_response("Error interno del servidor")
         
+        
+        @app.get("/callback", response_class=HTMLResponse)
+        async def oauth_callback_new(
+            request: Request,
+            code: Optional[str] = Query(None, description="Código de autorización de Google"), 
+            error: Optional[str] = Query(None, description="Error de autorización"),
+            state: Optional[str] = Query(None, description="Estado de la sesión (session_id)"),
+            scope: Optional[str] = Query(None, description="Scopes autorizados")
+        ):
+            """Endpoint optimizado para manejar callbacks de OAuth"""
+            try:
+                # El session_id viene en el parámetro state
+                session_id = state
+                
+                if not session_id:
+                    logger.error("No se recibió session_id en el parámetro state")
+                    return self._error_response("Sesión inválida o expirada")
+                
+                logger.info(f"Callback recibido para sesión {session_id}")
+                
+                # Actualizar la sesión con el código
+                await self.session_service.update_session_status(session_id, status=SessionStatus.UPDATED)
+
+                # Validar que la sesión existe
+                session_data = await self.session_service.get_session(session_id)
+
+                if not session_data:
+                    logger.error(f"Sesión no encontrada: {session_id}")
+                    raise HTTPException(status_code=404, detail="Sesión no encontrada o expirada")
+
+                # Manejar errores de autorización
+                if error:
+                    logger.error(f"Error de autorización para sesión {session_id}: {error}")
+                    await self.session_service.update_session_status(session_id, status=SessionStatus.ERROR, error=error)
+                    return self._error_response(f"Error de autorización: {error}")
+
+                # Validar que se recibió el código
+                if not code:
+                    logger.error(f"No se recibió código de autorización para sesión {session_id}")
+                    await self.session_service.update_session_status(session_id, status=SessionStatus.ERROR, error="No se recibió código de autorización")
+                    return self._error_response("No se recibió código de autorización")
+
+                logger.info(f"Código de autorización recibido para sesión {session_id}")
+
+                # Actualizar la sesión con el código
+                await self.session_service.update_session_status(session_id, status=SessionStatus.COMPLETED, code=code)
+
+                # ⚠️ Esperar a que el flujo se complete y obtener los datos del usuario
+                logger.info(f"Verificando sesión OAuth {session_id}")
+                result = await self.oauth_service.verify_oauth_session(session_id)
+
+                if "error" in result:
+                    logger.error(f"Error verificando OAuth para sesión {session_id}: {result['message']}")
+                    return self._error_response(f"Error autenticando al usuario: {result['message']}")
+
+                # ✅ Usuario autenticado correctamente
+                user_info = result.get("user_data", {}).get("id_token_data", {})
+                email = user_info.get("email", "email no disponible")
+
+                logger.info(f"Usuario autenticado: {email} (sesión: {session_id})")
+
+                if validate_email(email) == False:
+                    logger.error(f"Email inválido recibido: {email} (sesión: {session_id})")
+                    return self._error_response("No se recibió un correo válido")
+
+                # Intentar login en AveOnline
+                logger.info(f"Iniciando sesión en AveOnline para: {email}")
+                session = await self.ave_session.loginOAuth(email)
+
+                if session.get("error"):
+                    logger.error(f"Error iniciando sesión en AveOnline para {email}: {session.get('message')}")
+                    # No se encontró el usuario -> llevar al flujo de registro
+                    return self._error_response(f"Error iniciando sesión en AveOnline: {session.get('message')}")
+
+                # Actualizar sesión con datos de AveOnline
+                await self.session_service.update_session(
+                    session_id, 
+                    updates={"ave_session": asdict(session["data"])},
+                    extend_ttl=True
+                )
+
+                logger.info(f"Sesión OAuth completada exitosamente para {email} (sesión: {session_id})")
+                return self._success_response()
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error procesando callback para sesión {session_id if 'session_id' in locals() else 'unknown'}: {str(e)}")
+                return self._error_response("Error interno del servidor")
+        
         @app.get("/sessions", response_model=Dict[str, Any])
         async def get_sessions_status():
             """Endpoint para monitorear sesiones activas (solo en debug)"""

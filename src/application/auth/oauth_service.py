@@ -115,12 +115,16 @@ class OAuthService:
             code_verifier = self._generate_code_verifier()
             code_challenge = self._create_s256_code_challenge(code_verifier)
             
+            # Usar redirect_uri fija (sin session_id en la URL)
+            redirect_uri = f"{self.config.redirect_uri}/callback"
+
+            if ("localhost" in redirect_uri):
+                redirect_uri = f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback"
+            
             # Datos de la sesión
-            # 'redirect_uri': f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback",
-            # 
             session_data = {
                 'code_verifier': code_verifier,
-                'redirect_uri': f"{self.config.redirect_uri}/callback",
+                'redirect_uri': redirect_uri,
                 'created_for': 'oauth_flow'
             }
             
@@ -129,13 +133,6 @@ class OAuthService:
                 session_data, 
                 ttl=self.config.session_timeout
             )
-            
-            # Configurar redirect URI con session_id
-            # redirect_uri = f"{self.config.redirect_uri}:{self.config.callback_server_port}/callback/{session_id}"
-            redirect_uri = f"{self.config.redirect_uri}/callback/{session_id}"
-            
-            # Actualizar redirect_uri en la sesión
-            await session_service.update_session(session_id, {'redirect_uri': redirect_uri})
             
             # Crear cliente OAuth2 con PKCE
             client = AsyncOAuth2Client(
@@ -149,12 +146,10 @@ class OAuthService:
                 code_challenge=code_challenge,
                 code_challenge_method="S256",
                 scope=self.config.scope,
-                state=session_id,
+                state=session_id,  # El session_id va en el parámetro state
                 access_type="offline",
                 prompt="consent"
             )
-            
-            self.logger.info(f"URL OAuth creada para sesión: {session_id}")
             
             return {
                 "auth_url": auth_url,
@@ -164,6 +159,7 @@ class OAuthService:
         except Exception as e:
             self.logger.error(f"Error creando URL OAuth: {e}")
             raise
+
     
     async def handle_oauth_callback(self, session_id: str, code: Optional[str] = None, error: Optional[str] = None) -> bool:
         """Maneja el callback de OAuth y actualiza la sesión"""
